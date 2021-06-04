@@ -175,47 +175,23 @@ strat_est <- function(data.cohort, event.year, outcome.var, pscore){
     # Cluster robust version (J instead of N)
     
     # Treated
-    treated.data <-  treated.data %>%
-                     mutate(scores = outcome) %>%
-                     group_by(casenumber) %>%
-                     summarize(tauj=mean(scores)) %>%
-                     mutate (tau=mean(tauj)) %>%
-                     mutate (diff=(tau-tauj)^2) %>%
-                     ungroup()
-    
-    
-    unique.cases.t <- as.data.frame(unique(treated.data$casenumber))
-    colnames(unique.cases.t) <- c("casenumber")
-    
-    unique.cases.t <- semi_join(unique.cases.t,
-                                select(treated.data,
-                                       casenumber,
-                                       diff),
-                              by = "casenumber")
-    
-    t.se.part <- sqrt(1/(j.t*(j.t-1)) * sum(unique.cases.t$diff, na.rm = TRUE))
+    t.se.part <- unique((treated.data %>%
+                         mutate(scores = outcome) %>%
+                         group_by(casenumber) %>%
+                         dplyr::summarize(tauj=mean(scores)) %>%
+                         mutate(tau=mean(tauj)) %>%
+                         mutate(diff=(tau-tauj)^2) %>%
+                         mutate (se = sqrt(1/(j.t*(j.t-1)) * sum(diff))))$se)
     
     # Control
-    control.data <-  control.data %>%
-                      mutate(scores = outcome) %>%
-                      group_by(casenumber) %>%
-                      summarize(tauj=mean(scores)) %>%
-                      mutate (tau=mean(tauj)) %>%
-                      mutate (diff=(tau-tauj)^2) %>%
-                      ungroup()
-    
-    
-    unique.cases.c <- as.data.frame(unique(control.data$casenumber))
-    colnames(unique.cases.c) <- c("casenumber")
-    
-    unique.cases.c <- semi_join(unique.cases.c,
-                                select(treated.data,
-                                       casenumber,
-                                       diff),
-                                by = "casenumber")
-    
-    c.se.part <- sqrt(1/(j.c*(j.c-1)) * sum(unique.cases.c$diff, na.rm = TRUE))
-    
+    c.se.part <-  unique((control.data %>%
+                         mutate(scores = outcome) %>%
+                         group_by(casenumber) %>%
+                         dplyr::summarize(tauj=mean(scores)) %>%
+                         mutate(tau=mean(tauj)) %>%
+                         mutate(diff=(tau-tauj)^2) %>%
+                         mutate (se = sqrt(1/(j.c*(j.c-1)) * sum(diff))))$se)
+
     # Combine
     var.mat[i] <- t.se.part + c.se.part
   }
@@ -686,26 +662,14 @@ aipw <- function(input.data, e.hat.selection, outcome.selection){
   ate.aipw.est <- mean(aipw.scores, na.rm=TRUE)
   
   # Cluster robust standard errors
-  input.data <-  input.data %>%
-    mutate(scores = aipw.scores) %>%
-    group_by(casenumber) %>%
-    summarize(tauj=mean(scores)) %>%
-    mutate(tau=mean(tauj)) %>%
-    mutate(diff=(tau-tauj)^2) %>%
-    ungroup()
-                
-  n.cases <- length(unique(case.vec))
-  
-  unique.cases <- as.data.frame(unique(case.vec))
-  colnames(unique.cases) <- c("casenumber")
-  
-  unique.cases <- semi_join(unique.cases,
-                            select(input.data,
-                                   casenumber,
-                                   diff),
-                            by = "casenumber")
-  
-  ate.aipw.se <- sqrt(1/(n.cases*(n.cases-1)) * sum(unique.cases$diff, na.rm = TRUE))
+  ate.aipw.se <-  unique((input.data %>%
+                            mutate(scores = aipw.scores) %>%
+                            group_by(casenumber) %>%
+                            dplyr::summarize(tauj=mean(scores, na.rm=TRUE)) %>%
+                            mutate(tau=mean(tauj, na.rm=TRUE)) %>%
+                            mutate(diff=(tau-tauj)^2) %>%
+                            mutate(se = sqrt(1/(ate.aipw.j*(ate.aipw.j-1)) * sum(diff, na.rm=TRUE))))$se)
+ 
   ate.aipw.var <- ate.aipw.se^2
   ate.aipw.upper <- ate.aipw.est + 1.96 * ate.aipw.se
   ate.aipw.lower <- ate.aipw.est - 1.96 * ate.aipw.se
